@@ -13,6 +13,7 @@ import os
 import re
 import logging
 import struct
+import time
 
 VIDPIDS = [
     (0x0c45, 0x7401),
@@ -28,9 +29,12 @@ CALIB_LINE_STR = USB_PORTS_STR +\
     '\s*:\s*scale\s*=\s*([+|-]?\d*\.\d+)\s*,\s*offset\s*=\s*([+|-]?\d*\.\d+)'
 USB_SYS_PREFIX = '/sys/bus/usb/devices/'
 COMMANDS = {
-    'temp': b'\x01\x80\x33\x01\x00\x00\x00\x00',
-    'ini1': b'\x01\x82\x77\x01\x00\x00\x00\x00',
-    'ini2': b'\x01\x86\xff\x01\x00\x00\x00\x00',
+    'readTemper':     b'\x01\x80\x33\x01\x00\x00\x00\x00',
+    'getCalibration': b'\x01\x82\x77\x01\x00\x00\x00\x00',
+    'getVersion':     b'\x01\x86\xff\x01\x00\x00\x00\x00',
+    'stop':           b'\x01\x88\x55\x00\x00\x00\x00\x00',
+    'chipHeater':     b'\x01\x87\xaa\x01\x00\x00\x00\x00',
+    'stopChipHeater': b'\x01\x87\xbb\x01\x00\x00\x00\x00',
 }
 LOGGER = logging.getLogger(__name__)
 
@@ -236,22 +240,49 @@ class TemperDevice(object):
                 #    timeout=TIMEOUT)
 
 
-            # Magic: Our TEMPerV1.4 likes to be asked twice.  When
-            # only asked once, it get's stuck on the next access and
-            # requires a reset.
-            self._control_transfer(COMMANDS['temp'])
-            self._interrupt_read()
+            # Get TEMPer data
+            time.sleep(0.1)
+            self._control_transfer(COMMANDS['readTemper'])
+            while True:
+                time.sleep(0.1)
+                temp_data = self._interrupt_read()
+                print("temper %r" % (temp_data))
+                if (temp_data[0] == struct.unpack_from(">B", COMMANDS['readTemper'], 1)[0]):
+                    break
 
-            # Turns out a whole lot of that magic seems unnecessary.
-            #self._control_transfer(COMMANDS['ini1'])
-            #self._interrupt_read()
-            #self._control_transfer(COMMANDS['ini2'])
-            #self._interrupt_read()
-            #self._interrupt_read()
+            # Get calibration data
+            time.sleep(0.1)
+            self._control_transfer(COMMANDS['getCalibration'])
+            while True:
+                time.sleep(0.1)
+                calibration = self._interrupt_read()
+                print("calibration %r" % (calibration))
+                if (calibration[0] == struct.unpack_from(">B", COMMANDS['getCalibration'], 1)[0]):
+                    break
 
-            # Get temperature
-            self._control_transfer(COMMANDS['temp'])
-            temp_data = self._interrupt_read()
+            # Get version string
+            time.sleep(0.1)
+            self._control_transfer(COMMANDS['getVersion'])
+            while True:
+                time.sleep(0.1)
+                version1 = self._interrupt_read()
+                print("version1 %r" % (version1))
+                if (version1 != calibration):
+                    break
+            time.sleep(0.1)
+            version2 = self._interrupt_read()
+            print("version2 %r" % (version2))
+
+            # Parse calibration data
+            temp_cal = struct.unpack_from(">h", calibration, 2)[0] / 100.0
+            print("temp cal %f" % (temp_cal))
+            hum_cal = struct.unpack_from(">h", calibration, 4)[0] / 100.0
+            print("hum cal %f" % (hum_cal))
+            # Parse version string
+            v1 = struct.unpack_from("8s", version1)[0]
+            v2 = struct.unpack_from("8s", version2)[0]
+            ver = v1 + v2
+            print("ver %r" % (ver))
 
             # Get humidity
             if self._device.product == 'TEMPer1F_H1_V1.4':
@@ -328,6 +359,8 @@ class TemperDevice(object):
         for sensor in _sensors:
             offset = self.lookup_offset(sensor)
             celsius = struct.unpack_from('>h', data, offset)[0] / 256.0
+            print("%r" % data)
+            print("%f" % celsius)
             # Apply scaling and offset (if any)
             celsius = celsius * self._scale + self._offset
             results[sensor] = {
