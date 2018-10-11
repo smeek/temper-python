@@ -5,10 +5,19 @@ All notable changes to this project will be documented in this file.
 * This project follows the guidelines outlined on [keepachangelog.com](http://keepachangelog.com/).
 
 ## [Unreleased]
-### Added
-- Hints for local development
 
-## [1.5.2] - 2016-09-07
+No changes yet.
+
+## [1.5.3] - 2017-04-03 - Commit ID: 4da8be1
+### Added
+- Support for 0c45:7402 (RDing TEMPer1F_H1_V1.4) including humidity
+- Hints for local development
+- Add release documentation to `DEVELOPMENT.md`.
+### Fixed
+- Negative temperature readings incorrectly wrapped around to very high temperatures
+- Fixed format string error in the munin plugin (PR#71)
+
+## [1.5.2] - 2016-09-07 - Commit ID: e904dbe
 ### Fixed
 - Clarification of install documentation from eric-s-raymond.
 - Workaround for misleading error message when at least one TEMPer USB device node has insufficient permissions. (#63)
